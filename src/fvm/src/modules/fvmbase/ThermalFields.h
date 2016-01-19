@@ -17,6 +17,13 @@ struct ThermalFields
   Field temperatureN1;
   Field temperatureN2;
   Field specificHeat;
+  Field density;
+  Field enthalpy;
+  Field enthalpyN1;
+  Field enthalpyInverse;
+  Field dHdT;
+  Field meltFrac;
+  Field continuityResidual;
   Field heatFlux;
   Field temperatureGradient;
   Field conductivity;

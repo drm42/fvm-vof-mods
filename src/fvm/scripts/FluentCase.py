@@ -1,6 +1,5 @@
 
 from fvm import importers
-
 import SchemeParser
 
 def isConsPairOrList(v):

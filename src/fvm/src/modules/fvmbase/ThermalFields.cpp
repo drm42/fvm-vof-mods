@@ -15,7 +15,14 @@ ThermalFields::ThermalFields(const string baseName) :
   convectionFlux(baseName + ".convectionFlux"),
   zero(baseName + "zero"),
   one(baseName + "one"),
-  specificHeat(baseName + ".specificHeat")
+  specificHeat(baseName + ".specificHeat"),
+  density(baseName + ".density"),
+  enthalpy(baseName + ".enthalpy"),
+  enthalpyN1(baseName + ".enthalpyN1"),
+  enthalpyInverse(baseName + ".enthalpyInverse"),
+  dHdT(baseName + ".dHdT"),
+  meltFrac(baseName + ".meltFrac"),
+  continuityResidual(baseName + ".continuityResidual")
 {}
 
 

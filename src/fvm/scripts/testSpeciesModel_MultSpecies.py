@@ -7,7 +7,9 @@ import fvm.models_atyped_double as models
 import fvm.exporters_atyped_double as exporters
 from FluentCase import FluentCase
 #fvmbaseExt.enableDebug("cdtor")
+import pdb
 
+pdb.set_trace()
 reader = FluentCase("../test/SpeciesTest.cas")
 
 #import debug

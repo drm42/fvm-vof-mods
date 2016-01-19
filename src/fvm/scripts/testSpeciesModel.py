@@ -7,6 +7,7 @@ import fvm.models_atyped_double as models
 import fvm.exporters_atyped_double as exporters
 from FluentCase import FluentCase
 #fvmbaseExt.enableDebug("cdtor")
+import pdb
 
 reader = FluentCase("../test/TwoMaterialTest.cas")
 
@@ -14,7 +15,7 @@ reader = FluentCase("../test/TwoMaterialTest.cas")
 reader.read();
 
 meshes = reader.getMeshList()
-
+pdb.set_trace()
 geomFields =  models.GeomFields('geom')
 metricsCalculator = models.MeshMetricsCalculatorA(geomFields,meshes)
 

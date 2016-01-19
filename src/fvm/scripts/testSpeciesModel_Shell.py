@@ -21,7 +21,7 @@ meshes_case = reader.getMeshList()
 # The phi values at the interface between the two meshes are related as follows:
 # Phi_other = A * Phi_parent + B 
 interfaceID = 9
-shellmesh = meshes_case[1].createDoubleShell(interfaceID, meshes_case[0], interfaceID)
+shellmesh = meshes_case[1].createDoubleShell(interfaceID, meshes_case[0], interfaceID,True)
 meshes = [meshes_case[0], meshes_case[1], shellmesh]
 
 geomFields =  models.GeomFields('geom')

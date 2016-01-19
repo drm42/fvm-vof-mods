@@ -13,12 +13,12 @@ fvm:
 
 	# build using MPI
 	# default is False
-	parallel=True
+	parallel=False
 
 	# 'release', 'debug', or 'profile'
 	# release is built with optimization on
 	# default is release
-	version=release
+	version=debug
 	# compiler. 'intelc' or 'gcc'
 	# default is gcc
 	#compiler=gcc

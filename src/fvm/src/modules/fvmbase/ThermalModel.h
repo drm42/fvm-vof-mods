@@ -47,7 +47,7 @@ public:
 #if !(defined(USING_ATYPE_TANGENT) || defined(USING_ATYPE_PC))
   void dumpMatrix(const string fileBase);
 #endif
-  void advance(const int niter);
+  bool advance(const int niter);
 
   void updateTime();
 private:

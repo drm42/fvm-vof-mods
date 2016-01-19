@@ -4,7 +4,10 @@
 
 #include "Mesh.h"
 #include <sstream>
-
+#include <fstream>
+#include <algorithm>
+#include <iterator>
+#include <vector>
 #include "NumType.h"
 #include "Array.h"
 #include "Field.h"
@@ -26,6 +29,8 @@
 #include "GenericIBDiscretization.h"
 #include "SourceDiscretization.h"
 #include "TimeDerivativeDiscretization.h"
+#include "TimeDerivativeEnthalpyDiscretization.h"
+#include "EnthalpyFunction.h"
 
 template<class T>
 class ThermalModel<T>::Impl
@@ -37,6 +42,10 @@ public:
   typedef Gradient<T> TGradType;
   typedef Array<Gradient<T> > TGradArray;
   typedef CRMatrix<T,T,T> T_Matrix;
+
+  typedef std::vector<T> TVector;
+  typedef std::vector<TVector> VecVector;
+  typedef std::vector<int> intVector;
   
   Impl(const GeomFields& geomFields,
        ThermalFields& thermalFields,
@@ -47,7 +56,8 @@ public:
     _temperatureGradientModel(_meshes,_thermalFields.temperature,
                               _thermalFields.temperatureGradient,_geomFields),
     _initialNorm(),
-    _niters(0)
+    _niters(0),
+    _enthalpyModel()
   {
     const int numMeshes = _meshes.size();
     for (int n=0; n<numMeshes; n++)
@@ -91,6 +101,10 @@ public:
         const StorageSite& cells = mesh.getCells();
         const ThermalVC<T>& vc = *_vcMap[mesh.getID()];
 
+	if(_options.enthalpyModel || _options.polynomialCp){
+	  initPolyCp(); 
+	}
+
 	//temperature
         shared_ptr<TArray> tCell(new TArray(cells.getCountLevel1()));
         *tCell = _options["initialTemperature"];
@@ -113,6 +127,11 @@ public:
 	*sCell = T(0.);
 	_thermalFields.source.addArray(cells,sCell);
 
+	//continuity residual
+	shared_ptr<TArray> residCell(new TArray(cells.getCountLevel1()));
+	*residCell = T(0.);
+	_thermalFields.continuityResidual.addArray(cells,residCell);
+
 	//create a zero field
 	shared_ptr<TArray> zeroCell(new TArray(cells.getCountLevel1()));
 	*zeroCell = T(0.0);
@@ -125,8 +144,48 @@ public:
 
 	//create specific heat field   rho*Cp
 	shared_ptr<TArray> cp(new TArray(cells.getCount()));
-	*cp = vc["density"] * vc["specificHeat"];
+	if(_options.polynomialCp || _options.enthalpyModel){
+	  *cp = _enthalpyModel.findDHdT(_options["initialTemperature"])*
+	    vc["density"];
+	}
+	else {
+	  *cp = vc["density"] * vc["specificHeat"];
+	}
 	_thermalFields.specificHeat.addArray(cells, cp);
+	
+	if(_options.enthalpyModel){
+	  
+	  //create density field rho
+	  shared_ptr<TArray> rho(new TArray(cells.getCount()));
+	  *rho = vc["density"];
+	  _thermalFields.density.addArray(cells, rho);
+
+	  //create enthalpy field
+	  shared_ptr<TArray> h(new TArray(cells.getCount()));
+	  *h = T(0.0);
+	  _thermalFields.enthalpy.addArray(cells, h);
+
+	  //create previous enthalpy field
+	  shared_ptr<TArray> h_old(new TArray(cells.getCount()));
+	  *h_old = T(0.0);
+	  _thermalFields.enthalpyN1.addArray(cells, h_old); 
+
+	  //create enthalpy inverse field
+	  shared_ptr<TArray> hinv(new TArray(cells.getCount()));
+	  *hinv = _options["initialTemperature"];
+	  _thermalFields.enthalpyInverse.addArray(cells, hinv);
+
+	  //create dHdT field
+	  shared_ptr<TArray> dHdT(new TArray(cells.getCount()));
+	  *dHdT = _enthalpyModel.findDHdT(_options["initialTemperature"])*
+	    vc["density"];
+	  _thermalFields.dHdT.addArray(cells, dHdT);
+
+	  //create meltFrac field
+          shared_ptr<TArray> meltFrac(new TArray(cells.getCount()));
+          *meltFrac = T(0.0);
+          _thermalFields.meltFrac.addArray(cells, meltFrac);
+	}
 
 	//initial temparature gradient array
 	shared_ptr<TGradArray> gradT(new TGradArray(cells.getCountLevel1()));
@@ -177,6 +236,43 @@ public:
   ThermalBC<T>& getBC(const int id) {return *_bcMap[id];}
 
   ThermalModelOptions<T>& getOptions() {return _options;}
+
+  void initPolyCp(){
+    int numRanges = 0;
+    TVector ranges;
+    intVector orders;
+    VecVector polys;
+
+    std::ifstream infile(_options.cpFile.c_str());
+    std::string line;
+
+    while (std::getline(infile,line)){
+      numRanges++;
+      std::istringstream iss(line);
+      std::vector<T> tokens;
+      copy(std::istream_iterator<T>(iss),
+	   std::istream_iterator<T>(),
+	   back_inserter(tokens));
+      if(tokens.size() < 2) {
+	throw CException("Not enough entries on Cp model file line " 
+			 + numRanges);
+      }
+      orders.push_back(tokens.size()-2);
+      ranges.push_back(tokens.at(0));
+      TVector poly;
+      for(int i = 1; i < tokens.size(); i++){
+	poly.push_back(tokens.at(i));
+      }
+      polys.push_back(poly);
+    
+    }
+    _enthalpyModel.setFunctionValues(numRanges,ranges,orders,polys,
+				     _options["solidTemp"],_options["liquidTemp"],
+				     _options["latentHeat"],
+				     _options["initialTemperature"]);
+    _enthalpyModel.printEnthalpyFunction();
+
+  }
 
   void initLinearization(LinearSystem& ls)
   {
@@ -252,7 +348,7 @@ public:
 	 (_meshes,_geomFields,
 	  _thermalFields.temperature,
 	  _thermalFields.convectionFlux,
-	  _thermalFields.zero,
+	  _thermalFields.continuityResidual,
 	  _thermalFields.temperatureGradient,
           _options.useCentralDifference));
     discretizations.push_back(cd);
@@ -268,15 +364,41 @@ public:
     
     if (_options.transient)
       {
-	shared_ptr<Discretization>
-	  td(new TimeDerivativeDiscretization<T, T, T>
-	     (_meshes, _geomFields, 
-	      _thermalFields.temperature, 
-	      _thermalFields.temperatureN1,
-	      _thermalFields.temperatureN2,
-	      _thermalFields.specificHeat,
-	      _options["timeStep"]));
-	discretizations.push_back(td);
+
+	if (_options.enthalpyModel)
+	  {
+	    shared_ptr<Discretization>
+	      ted(new TimeDerivativeEnthalpyDiscretization<T, T, T>
+		 (_meshes, _geomFields, 
+		  _thermalFields.temperature, 
+		  _thermalFields.temperatureN1,
+		  _thermalFields.temperatureN2,
+		  _thermalFields.specificHeat,
+		  _thermalFields.density,
+		  _thermalFields.enthalpy,
+		  _thermalFields.enthalpyN1,
+		  _thermalFields.enthalpyInverse,
+		  _thermalFields.dHdT,
+		  _options["timeStep"],
+		  _options["latentHeat"],
+		  _options["solidTemp"],
+		  _options["liquidTemp"],
+		  _options["initialTemperature"]));
+	    discretizations.push_back(ted);
+	  }
+
+	else
+	  {
+	    shared_ptr<Discretization>
+	      td(new TimeDerivativeDiscretization<T, T, T>
+		 (_meshes, _geomFields, 
+		  _thermalFields.temperature, 
+		  _thermalFields.temperatureN1,
+		  _thermalFields.temperatureN2,
+		  _thermalFields.specificHeat,
+		  _options["timeStep"]));
+	    discretizations.push_back(td);
+	  }
       }
     
     shared_ptr<Discretization>
@@ -421,7 +543,7 @@ public:
   }
 
 
-  void advance(const int niter)
+  bool advance(const int niter)
   {
     for(int n=0; n<niter; n++)
     { 
@@ -448,11 +570,17 @@ public:
         ls.postSolve();
         ls.updateSolution();
 
+	if (_options.enthalpyModel || _options.polynomialCp) {
+	  updateEnthalpy();
+	}
+
         _niters++;
         if (*rNorm < _options.absoluteTolerance ||
             *normRatio < _options.relativeTolerance)
-          break;
+          return true;
     }
+    return false;
+
   }
     
   void printBCs()
@@ -477,11 +605,33 @@ public:
       const Mesh& mesh = *_meshes[n];
       const StorageSite& cells = mesh.getCells();
       const int nCells = cells.getCountLevel1();
+      const int one = T(1.0);
 	
       TArray& temperature =
           dynamic_cast<TArray&>(_thermalFields.temperature[cells]);
       TArray& temperatureN1 =
           dynamic_cast<TArray&>(_thermalFields.temperatureN1[cells]);
+      if (_options.enthalpyModel) {
+	TArray& enthalpy =
+          dynamic_cast<TArray&>(_thermalFields.enthalpy[cells]);
+	TArray& enthalpyN1 =
+          dynamic_cast<TArray&>(_thermalFields.enthalpyN1[cells]);
+	enthalpyN1 = enthalpy;
+	TArray& meltFrac =
+          dynamic_cast<TArray&>(_thermalFields.meltFrac[cells]);
+	for (int c=0; c<nCells; c++) {
+	  if (meltFrac[c] < one){
+	    if (temperature[c] >= _options["liquidTemp"]){
+	      meltFrac[c] = one;
+	    }
+	    else if (temperature[c] > _options["solidTemp"]){
+	      meltFrac[c] = std::max(meltFrac[c],
+	        (temperature[c]-_options["solidTemp"])/(_options["liquidTemp"]-
+							_options["solidTemp"]));
+	    }
+	  }
+        }
+      }
      
       if (_options.timeDiscretizationOrder > 1)
         {
@@ -490,6 +640,60 @@ public:
 	  temperatureN2 = temperatureN1;
         }
       temperatureN1 = temperature;
+    }
+  }
+
+  void updateEnthalpy()
+  {
+    const int numMeshes = _meshes.size();
+    //const T Tref(_options["initialTemperature"]);
+    //const T latentHeat(_options["latentHeat"]);
+    //const T solidTemp(_options["solidTemp"]);
+    //const T liquidTemp(_options["liquidTemp"]);
+    for (int n=0; n<numMeshes; n++)    {
+     
+      const Mesh& mesh = *_meshes[n];
+      const StorageSite& cells = mesh.getCells();
+      const int nCells = cells.getCount();
+
+      if(_options.enthalpyModel){
+	TArray& enthalpy =
+	  dynamic_cast<TArray&>(_thermalFields.enthalpy[cells]);
+	TArray& enthalpyInverse =
+	  dynamic_cast<TArray&>(_thermalFields.enthalpyInverse[cells]);
+	TArray& dHdT =
+	  dynamic_cast<TArray&>(_thermalFields.dHdT[cells]);
+	TArray& rhoCp =
+	  dynamic_cast<TArray&>(_thermalFields.specificHeat[cells]);
+	const TArray& density =
+	  dynamic_cast<const TArray&>(_thermalFields.density[cells]);
+	const TArray& temperature =
+	  dynamic_cast<const TArray&>(_thermalFields.temperature[cells]);
+	const T enthE = T(_enthalpyModel.findEnthalpy(_options["solidTemp"]));
+	for (int c=0; c<nCells; c++) {
+	  enthalpy[c] = enthalpy[c] + dHdT[c]*(temperature[c]-enthalpyInverse[c]);
+	  if (((enthalpy[c]/density[c]) <= enthE) && 
+	      (temperature[c] >= _options["solidTemp"]) &&
+	      (temperature[c] <= _options["liquidTemp"]) &&
+	      (enthalpyInverse[c] > _options["solidTemp"])){
+	    enthalpy[c] = _enthalpyModel.findEnthalpy(temperature[c])*density[c];
+	  }
+	  enthalpyInverse[c] = _enthalpyModel.findEnthalpyInverse(enthalpy[c]/density[c]);
+	  dHdT[c] = _enthalpyModel.findDHdT(enthalpyInverse[c])*density[c];
+	  rhoCp[c] = dHdT[c];
+	}
+      }
+      else if(_options.polynomialCp){
+	TArray& rhoCp =
+	  dynamic_cast<TArray&>(_thermalFields.specificHeat[cells]);
+	const TArray& density =
+	  dynamic_cast<const TArray&>(_thermalFields.density[cells]);
+	const TArray& temperature =
+	  dynamic_cast<const TArray&>(_thermalFields.temperature[cells]);
+	for (int c=0; c<nCells; c++) {
+	  rhoCp[c] = _enthalpyModel.findDHdT(temperature[c])*density[c];
+	}
+      }
     }
   }
 
@@ -625,6 +829,8 @@ private:
   
   MFRPtr _initialNorm;
   int _niters;
+
+  EnthalpyFunction<T> _enthalpyModel;
 };
 
 template<class T>
@@ -676,7 +882,7 @@ ThermalModel<T>::printBCs()
 }
 
 template<class T>
-void
+bool
 ThermalModel<T>::advance(const int niter)
 {
   _impl->advance(niter);

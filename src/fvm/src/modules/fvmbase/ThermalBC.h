@@ -39,19 +39,27 @@ struct ThermalModelOptions : public FloatVarDict<T>
   {
     this->defineVar("initialTemperature",T(300.0));
     this->defineVar("timeStep", T(1e-7));
+    this->defineVar("latentHeat", T(1e5));
+    this->defineVar("solidTemp", T(400));
+    this->defineVar("liquidTemp", T(410));
     this->relativeTolerance=1e-8;
     this->absoluteTolerance=1e-16;
     this->linearSolver = 0;
     this->useCentralDifference=false;
     this->transient=false;
+    this->enthalpyModel=false;
     this->timeDiscretizationOrder = 1;
+    this->polynomialCp=false;
   }
   double relativeTolerance;
   double absoluteTolerance;
   bool useCentralDifference;
   LinearSolver *linearSolver;
   bool transient;
+  bool enthalpyModel;
   int timeDiscretizationOrder;
+  bool polynomialCp;
+  string cpFile;
 #ifndef SWIG
   LinearSolver& getLinearSolver()
   {

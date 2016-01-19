@@ -20,6 +20,7 @@ struct FlowFields
   Field momentumFlux;
   Field viscosity;
   Field density;
+  Field densityN1;
   Field continuityResidual;
   Field velocityN1;
   Field velocityN2;
@@ -34,6 +35,7 @@ struct FlowFields
   Field uparallel;
   Field tau;
   Field tauwall; //parallel to flow
+  Field source;
   // ESInterface
   Field InterfaceVelocity;
   Field InterfacePressure;

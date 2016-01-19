@@ -27,6 +27,9 @@ struct ThermalModelOptions : public FloatVarDict<T>
   LinearSolver *linearSolver;
   bool useCentralDifference;
   bool transient;
+  bool enthalpyModel;
+  bool polynomialCp;
+  string cpFile;
 }; 
 
 
@@ -38,7 +41,6 @@ struct ThermalModelOptions : public FloatVarDict<T>
 %template(ThermalVCsMap) std::map<int,ThermalVC< ATYPE_STR >* >;
 
 %template(ThermalModelOptionsA) ThermalModelOptions< ATYPE_STR >;
-
 
 %import "Model.i"
 

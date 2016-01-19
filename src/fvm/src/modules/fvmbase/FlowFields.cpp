@@ -13,6 +13,7 @@ FlowFields::FlowFields(const string baseName) :
   momentumFlux(baseName + ".momentumFlux"),
   viscosity(baseName + ".viscosity"),
   density(baseName + ".density"),
+  densityN1(baseName + ".densityN1"),
   continuityResidual(baseName + ".continuityResidual"),
   velocityN1(baseName + ".velocityN1"),
   velocityN2(baseName + ".velocityN2"),
@@ -27,6 +28,7 @@ FlowFields::FlowFields(const string baseName) :
   uparallel(baseName + ".uparallel"),
   tau(baseName + ".tau"),
   tauwall(baseName + ".tauwall"),
+  source(baseName + ".source"),
 
   //ESInterface
   InterfaceVelocity(baseName+".InterfaceVelocity"),
